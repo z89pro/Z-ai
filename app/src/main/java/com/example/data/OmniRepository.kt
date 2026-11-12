@@ -59,6 +59,7 @@ class OmniRepository(private val dao: OmniDao) {
     suspend fun insertModel(model: HfModelEntity) = dao.insertModel(model)
     suspend fun updateModel(model: HfModelEntity) = dao.updateModel(model)
     suspend fun setActiveModel(modelId: String) = dao.setActiveModel(modelId)
+    suspend fun getModelsSnapshot() = dao.getAllModelsSnapshot()
 
     private fun defaultHfModels(): List<HfModelEntity> = listOf(
         HfModelEntity(
@@ -73,7 +74,7 @@ class OmniRepository(private val dao: OmniDao) {
             parameterCount = "2.6B",
             isDownloaded = true,
             isActive = true,
-            localFilePath = "/data/user/0/files/models/gemma-2-2b-it-Q4_K_M.gguf",
+            localFilePath = "",
             downloadsCount = 184500,
             likesCount = 940,
             specialty = "Default Z AI Engine • Schedule, Conflict & Deadline Reasoning"
@@ -88,9 +89,9 @@ class OmniRepository(private val dao: OmniDao) {
             downloadUrl = "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
             sizeMb = 1120,
             parameterCount = "1.5B",
-            isDownloaded = true,
+            isDownloaded = false,
             isActive = false,
-            localFilePath = "/data/user/0/files/models/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf",
+            localFilePath = "",
             downloadsCount = 142300,
             likesCount = 815,
             specialty = "Code Studio • Polyglot Synthesis & Refactoring"
@@ -286,13 +287,40 @@ class OmniRepository(private val dao: OmniDao) {
 
     private fun defaultWorkflowMacros(): List<WorkflowMacroEntity> = listOf(
         WorkflowMacroEntity(
-            title = "Autonomous Morning Standup & Conflict Fixer",
-            triggerPhrase = "morning standup",
-            description = "Gemma 2B re-prioritizes tasks by deadline & importance, resolves overlapping calendar meetings, sets a deep-work alarm, and speaks your briefing.",
-            stepsPipeSeparated = "ANALYZE_SENSITIVE_TASKS|AUTO_RESOLVE_CALENDAR|SET_ALARM:14:00|SPEAK_BRIEFING",
+            title = "New Task Auto-Triage & Priority Pipeline",
+            triggerPhrase = "triage new task",
+            description = "Triggered when a new task is added: advances urgent tasks to IN_PROGRESS, recalculates priority scores, time-blocks conflicts, and posts a notification.",
+            stepsPipeSeparated = "SEND_NOTIFICATION|UPDATE_TASK_STATUS|RESCHEDULE_EVENTS|SPEAK_BRIEFING",
             targetPhoneOrEmail = "eng-lead@zai.local",
             runCount = 4,
-            lastRunSummary = "Resolved 2 conflicts & prioritized 5 deadline tasks"
+            lastRunSummary = "Auto-triaged task statuses, resolved conflicts & sent alert",
+            triggerEventType = "ON_TASK_ADDED",
+            isAutoTriggerEnabled = true,
+            lastTriggeredByEvent = "ON_TASK_ADDED"
+        ),
+        WorkflowMacroEntity(
+            title = "Meeting Scheduled Conflict Resolver & Prep",
+            triggerPhrase = "meeting conflict check",
+            description = "Triggered when a meeting is scheduled: automatically reschedules overlapping events, updates linked task statuses, and sends a schedule notification.",
+            stepsPipeSeparated = "RESCHEDULE_EVENTS|UPDATE_TASK_STATUS|SEND_NOTIFICATION|SPEAK_BRIEFING",
+            targetPhoneOrEmail = "team@zai.local",
+            runCount = 3,
+            lastRunSummary = "Rescheduled overlapping events & notified attendees",
+            triggerEventType = "ON_MEETING_SCHEDULED",
+            isAutoTriggerEnabled = true,
+            lastTriggeredByEvent = "ON_MEETING_SCHEDULED"
+        ),
+        WorkflowMacroEntity(
+            title = "Approaching Deadline Rescue & Focus Sprint",
+            triggerPhrase = "deadline rescue",
+            description = "Triggered when a task deadline is approaching (≤12h): promotes task status to IN_PROGRESS, clears calendar conflicts, starts a focus countdown timer, and alerts you.",
+            stepsPipeSeparated = "SEND_NOTIFICATION|UPDATE_TASK_STATUS|RESCHEDULE_EVENTS|CREATE_COUNTDOWN_TIMER",
+            targetPhoneOrEmail = "sec-ops@zai.local",
+            runCount = 5,
+            lastRunSummary = "Escalated ≤12h deadline task, cleared schedule & started timer",
+            triggerEventType = "ON_DEADLINE_APPROACHING",
+            isAutoTriggerEnabled = true,
+            lastTriggeredByEvent = "ON_DEADLINE_APPROACHING"
         ),
         WorkflowMacroEntity(
             title = "Emergency Incident Escalation & Call Lead",
@@ -301,25 +329,9 @@ class OmniRepository(private val dao: OmniDao) {
             stepsPipeSeparated = "ANALYZE_SENSITIVE_TASKS|GENERATE_INCIDENT_SCRIPT|SEND_EMAIL:sec-ops@zai.local|DIAL_NUMBER:+15550192834",
             targetPhoneOrEmail = "+15550192834",
             runCount = 1,
-            lastRunSummary = "Requires user approval gate before calling/emailing"
-        ),
-        WorkflowMacroEntity(
-            title = "Late-Night Deep Focus & Code Sprint",
-            triggerPhrase = "deep focus mode",
-            description = "Blocks a conflict-free calendar slot, synthesizes a sprint automation script in Code Studio, and sets a focus timer.",
-            stepsPipeSeparated = "AUTO_RESOLVE_CALENDAR|GENERATE_CODE_SNIPPET|SET_TIMER:5400|SPEAK_BRIEFING",
-            targetPhoneOrEmail = "",
-            runCount = 7,
-            lastRunSummary = "Blocked focus window & synthesized Kotlin script"
-        ),
-        WorkflowMacroEntity(
-            title = "Sync Calendar Event to System Calendar",
-            triggerPhrase = "export next meeting",
-            description = "Extracts the next upcoming workspace meeting and opens the native Android Calendar insert sheet.",
-            stepsPipeSeparated = "ANALYZE_SENSITIVE_TASKS|INSERT_SYSTEM_CALENDAR|SPEAK_BRIEFING",
-            targetPhoneOrEmail = "team@zai.local",
-            runCount = 2,
-            lastRunSummary = "Prepared native Android Calendar event intent"
+            lastRunSummary = "Requires user approval gate before calling/emailing",
+            triggerEventType = "MANUAL_OR_VOICE",
+            isAutoTriggerEnabled = false
         )
     )
 

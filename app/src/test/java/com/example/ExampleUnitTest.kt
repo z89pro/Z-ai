@@ -556,6 +556,113 @@ class ExampleUnitTest {
             tempRoot.deleteRecursively()
         }
     }
+
+    @Test
+    fun `Event-driven multi-step workflows trigger autonomously on task added, meeting scheduled, and deadline approaching`() {
+        val engine = LocalAiAndSandboxEngine()
+        val initialTasks = listOf(
+            ProjectTaskEntity(
+                id = 1,
+                title = "Implement Zero-Trust Key Rotation",
+                description = "Rotate AES-256 enclave keys",
+                projectTag = "Security Enclave",
+                status = "TODO",
+                priority = "HIGH",
+                deadlineHoursRemaining = 6,
+                userImportance = 5
+            ),
+            ProjectTaskEntity(
+                id = 2,
+                title = "Update Onboarding Documentation",
+                description = "Add workflow trigger docs",
+                projectTag = "Docs",
+                status = "TODO",
+                priority = "LOW",
+                deadlineHoursRemaining = 48,
+                userImportance = 2
+            )
+        )
+        val initialEvents = listOf(
+            CalendarEventEntity(
+                id = 10,
+                title = "Architecture Review",
+                startHour = 10,
+                startMinute = 0,
+                durationMinutes = 60,
+                attendees = "eng@zai.local",
+                locationOrLink = "Room 1",
+                category = "MEETING",
+                hasConflict = true,
+                conflictReason = "Overlaps with Security Sync"
+            ),
+            CalendarEventEntity(
+                id = 11,
+                title = "Security Sync",
+                startHour = 10,
+                startMinute = 30,
+                durationMinutes = 45,
+                attendees = "sec@zai.local",
+                locationOrLink = "Room 2",
+                category = "MEETING",
+                hasConflict = true,
+                conflictReason = "Overlaps with Architecture Review"
+            )
+        )
+
+        val customMacros = listOf(
+            com.example.data.WorkflowMacroEntity(
+                id = 101,
+                title = "New Task Auto-Triage Workflow",
+                triggerPhrase = "triage new task",
+                description = "Sends notification, updates task statuses, and reschedules conflicting events",
+                stepsPipeSeparated = "SEND_NOTIFICATION|UPDATE_TASK_STATUS|RESCHEDULE_EVENTS",
+                triggerEventType = "ON_TASK_ADDED",
+                isAutoTriggerEnabled = true
+            ),
+            com.example.data.WorkflowMacroEntity(
+                id = 102,
+                title = "Deadline Approaching Rescue Workflow",
+                triggerPhrase = "deadline rescue",
+                description = "Starts countdown timer and sends alert when deadline <= 12h",
+                stepsPipeSeparated = "SEND_NOTIFICATION|UPDATE_TASK_STATUS|CREATE_COUNTDOWN_TIMER",
+                triggerEventType = "ON_DEADLINE_APPROACHING",
+                isAutoTriggerEnabled = true
+            )
+        )
+
+        val taskAddedResult = engine.executeEventTriggeredWorkflows(
+            eventType = "ON_TASK_ADDED",
+            eventContextTitle = "Implement Zero-Trust Key Rotation",
+            macros = customMacros,
+            tasks = initialTasks,
+            events = initialEvents,
+            activeModel = null
+        )
+
+        assertEquals(1, taskAddedResult.triggeredMacros.size)
+        assertTrue(taskAddedResult.dispatchedNotifications.isNotEmpty())
+        assertTrue(taskAddedResult.tasksStatusUpdatedCount >= 1)
+        assertTrue(taskAddedResult.eventsRescheduledCount >= 1)
+        assertTrue(taskAddedResult.updatedEvents.none { it.hasConflict })
+        assertEquals(
+            "IN_PROGRESS",
+            taskAddedResult.updatedTasks.first { it.title == "Implement Zero-Trust Key Rotation" }.status
+        )
+        assertEquals(1, taskAddedResult.triggeredMacros.first().runCount)
+
+        val deadlineResult = engine.executeEventTriggeredWorkflows(
+            eventType = "ON_DEADLINE_APPROACHING",
+            eventContextTitle = "Implement Zero-Trust Key Rotation (Due in 6h)",
+            macros = taskAddedResult.updatedMacros,
+            tasks = taskAddedResult.updatedTasks,
+            events = taskAddedResult.updatedEvents,
+            activeModel = null
+        )
+        assertEquals(1, deadlineResult.triggeredMacros.size)
+        assertNotNull(deadlineResult.createdTimerTitle)
+        assertTrue(deadlineResult.dispatchedNotifications.isNotEmpty())
+    }
 }
+
 
 

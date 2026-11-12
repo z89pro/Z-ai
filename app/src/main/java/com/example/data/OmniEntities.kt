@@ -52,6 +52,49 @@ data class CalendarEventEntity(
     }
 }
 
+enum class WorkflowTriggerEventType(
+    val code: String,
+    val label: String,
+    val description: String
+) {
+    ON_TASK_ADDED(
+        code = "ON_TASK_ADDED",
+        label = "When New Task Added",
+        description = "Fires autonomously whenever a new task is created in the workspace"
+    ),
+    ON_MEETING_SCHEDULED(
+        code = "ON_MEETING_SCHEDULED",
+        label = "When Meeting Scheduled",
+        description = "Fires autonomously whenever a calendar meeting or slot is booked"
+    ),
+    ON_DEADLINE_APPROACHING(
+        code = "ON_DEADLINE_APPROACHING",
+        label = "When Deadline Approaching (≤12h)",
+        description = "Fires autonomously when a task deadline enters the urgent ≤12h window"
+    ),
+    MANUAL_OR_VOICE(
+        code = "MANUAL_OR_VOICE",
+        label = "Voice Phrase / One-Tap Manual",
+        description = "Fires when spoken trigger phrase is heard or Execute button is tapped"
+    );
+
+    companion object {
+        fun fromCode(code: String): WorkflowTriggerEventType =
+            entries.firstOrNull { it.code.equals(code, ignoreCase = true) } ?: ON_TASK_ADDED
+    }
+}
+
+enum class WorkflowActionStepType(
+    val code: String,
+    val label: String
+) {
+    SEND_NOTIFICATION("SEND_NOTIFICATION", "Send System Notification & Alert"),
+    UPDATE_TASK_STATUS("UPDATE_TASK_STATUS", "Update Task Statuses & Priority Scores"),
+    RESCHEDULE_EVENTS("RESCHEDULE_EVENTS", "Reschedule Conflicting & Related Events"),
+    CREATE_COUNTDOWN_TIMER("CREATE_COUNTDOWN_TIMER", "Start Countdown Focus Timer"),
+    SPEAK_BRIEFING("SPEAK_BRIEFING", "Speak Executive Briefing (TTS)")
+}
+
 @Entity(tableName = "workflow_macros")
 data class WorkflowMacroEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -61,10 +104,16 @@ data class WorkflowMacroEntity(
     val stepsPipeSeparated: String,
     val targetPhoneOrEmail: String = "",
     val runCount: Int = 0,
-    val lastRunSummary: String = "Ready for voice or one-tap execution"
+    val lastRunSummary: String = "Ready for voice or autonomous event execution",
+    val triggerEventType: String = "ON_TASK_ADDED",
+    val isAutoTriggerEnabled: Boolean = true,
+    val lastTriggeredByEvent: String = ""
 ) {
     fun stepsList(): List<String> =
         stepsPipeSeparated.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+
+    fun triggerEventDisplayLabel(): String =
+        WorkflowTriggerEventType.fromCode(triggerEventType).label
 }
 
 @Entity(tableName = "code_snippets")

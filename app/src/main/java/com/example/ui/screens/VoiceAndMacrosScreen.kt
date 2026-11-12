@@ -82,7 +82,9 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.data.WorkflowActionStepType
 import com.example.data.WorkflowMacroEntity
+import com.example.data.WorkflowTriggerEventType
 import com.example.domain.WakeWordSessionState
 import com.example.domain.ZAICustomSkill
 import com.example.ui.MacroExecutionStepState
@@ -125,7 +127,9 @@ fun VoiceAndMacrosScreen(
     onSubmitVoiceCommandText: (String) -> Unit,
     onOpenCodeStudio: () -> Unit,
     onRunMacro: (WorkflowMacroEntity) -> Unit,
-    onCreateCustomMacro: (String, String, String, String, String) -> Unit,
+    onCreateCustomMacro: (String, String, String, String, String, String, Boolean) -> Unit,
+    onToggleMacroAutoTrigger: (WorkflowMacroEntity) -> Unit = {},
+    onSimulateWorkflowEvent: (String, String) -> Unit = { _, _ -> },
     onToggleCustomSkill: (String) -> Unit,
     onAddCustomSkill: (String, String, String, Boolean) -> Unit,
     onToggleHighRiskFirewall: (Boolean) -> Unit,
@@ -498,7 +502,7 @@ fun VoiceAndMacrosScreen(
                         val quickPhrases = listOf(
                             "Schedule a meeting with the design team for next Tuesday afternoon, create a task for each attendee to prepare their latest mockups, and draft an agenda based on our ongoing project goals.",
                             "Write a Python script to calculate sprint velocity and execute it in the sandbox",
-                            "morning standup",
+                            "triage new task",
                             "escalate incident",
                             "optimize schedule and resolve conflicts"
                         )
@@ -1093,32 +1097,86 @@ fun VoiceAndMacrosScreen(
             }
         }
 
-        // 6. Multi-Step Autonomous Workflow Macros
+        // 6. Event-Driven Multi-Step Autonomous Workflow Automation Header + Event Simulator Bar
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, NeuralViolet.copy(alpha = 0.55f), RoundedCornerShape(16.dp))
+                    .testTag("event_workflow_engine_card"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Bolt,
-                        contentDescription = "Autonomous Workflows",
-                        tint = NeuralViolet
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Multi-Step Autonomous Workflows",
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                }
-                OutlinedButton(
-                    onClick = { showCreateMacroDialog = true },
-                    modifier = Modifier.testTag("open_create_macro_dialog_button")
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "New Macro", modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("New Macro", style = MaterialTheme.typography.labelLarge)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = "Autonomous Workflows",
+                                tint = ElectricCyan
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Event-Driven Autonomous Workflows",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Auto-triggers on New Task, Meeting Scheduled, or Approaching Deadline",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Button(
+                            onClick = { showCreateMacroDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ElectricCyan,
+                                contentColor = Color(0xFF042F2E)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("open_create_macro_dialog_button")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "New Workflow", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("New Workflow", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Text(
+                        text = "Simulate Live Event Trigger (Test Autonomous Multi-Step Execution):",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val simEvents = listOf(
+                            Triple("ON_TASK_ADDED", "⚡ Trigger: New Task Added", "Deploy Enclave Patch v2.4"),
+                            Triple("ON_MEETING_SCHEDULED", "📅 Trigger: Meeting Scheduled", "Architecture Sync"),
+                            Triple("ON_DEADLINE_APPROACHING", "⏰ Trigger: Deadline ≤12h", "Audit Zero-Trust Keys (6h)")
+                        )
+                        items(simEvents) { (code, label, contextTitle) ->
+                            OutlinedButton(
+                                onClick = { onSimulateWorkflowEvent(code, contextTitle) },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.testTag("simulate_workflow_event_${code.lowercase()}")
+                            ) {
+                                Text(label, style = MaterialTheme.typography.labelSmall, color = ElectricCyan)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1126,7 +1184,8 @@ fun VoiceAndMacrosScreen(
         items(macros, key = { "macro_${it.id}" }) { macro ->
             WorkflowMacroCard(
                 macro = macro,
-                onRun = { onRunMacro(macro) }
+                onRun = { onRunMacro(macro) },
+                onToggleAutoTrigger = { onToggleMacroAutoTrigger(macro) }
             )
         }
 
@@ -1138,8 +1197,8 @@ fun VoiceAndMacrosScreen(
     if (showCreateMacroDialog) {
         CreateMacroDialog(
             onDismiss = { showCreateMacroDialog = false },
-            onConfirm = { title, trigger, desc, steps, contact ->
-                onCreateCustomMacro(title, trigger, desc, steps, contact)
+            onConfirm = { title, triggerPhrase, desc, steps, contact, eventType, autoEnabled ->
+                onCreateCustomMacro(title, triggerPhrase, desc, steps, contact, eventType, autoEnabled)
                 showCreateMacroDialog = false
             }
         )
@@ -1159,7 +1218,8 @@ fun VoiceAndMacrosScreen(
 @Composable
 private fun WorkflowMacroCard(
     macro: WorkflowMacroEntity,
-    onRun: () -> Unit
+    onRun: () -> Unit,
+    onToggleAutoTrigger: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -1181,29 +1241,70 @@ private fun WorkflowMacroCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    color = NeuralViolet.copy(alpha = 0.22f),
-                    shape = RoundedCornerShape(8.dp)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        color = ElectricCyan.copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = macro.triggerEventDisplayLabel(),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = ElectricCyan,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                    Surface(
+                        color = NeuralViolet.copy(alpha = 0.22f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "\"${macro.triggerPhrase}\"",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFDDD6FE),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "VOICE TRIGGER: \"${macro.triggerPhrase}\"",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFFDDD6FE),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        text = if (macro.isAutoTriggerEnabled) "Auto ON" else "Manual",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (macro.isAutoTriggerEnabled) EmeraldEnclave else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = macro.isAutoTriggerEnabled,
+                        onCheckedChange = { onToggleAutoTrigger() },
+                        modifier = Modifier.testTag("macro_auto_switch_${macro.id}")
                     )
                 }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = macro.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
                 Text(
                     text = "Runs: ${macro.runCount}",
                     style = MaterialTheme.typography.labelSmall,
                     color = EmeraldEnclave
                 )
             }
-
-            Text(
-                text = macro.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
 
             Text(
                 text = macro.description,
@@ -1319,21 +1420,27 @@ private fun AddCustomSkillDialog(
 @Composable
 private fun CreateMacroDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, String, String, String) -> Unit
+    onConfirm: (String, String, String, String, String, String, Boolean) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var triggerPhrase by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var targetContact by remember { mutableStateOf("+15550192834") }
-    var includeAutoSchedule by remember { mutableStateOf(true) }
-    var includeCodeGen by remember { mutableStateOf(true) }
-    var includeEmailOrCall by remember { mutableStateOf(true) }
+    var targetContact by remember { mutableStateOf("team@zai.local") }
+    var selectedEventTrigger by remember { mutableStateOf(WorkflowTriggerEventType.ON_TASK_ADDED) }
+    var isAutoTriggerEnabled by remember { mutableStateOf(true) }
+
+    var stepSendNotification by remember { mutableStateOf(true) }
+    var stepUpdateTaskStatus by remember { mutableStateOf(true) }
+    var stepRescheduleEvents by remember { mutableStateOf(true) }
+    var stepStartCountdownTimer by remember { mutableStateOf(false) }
+    var stepSpeakBriefing by remember { mutableStateOf(true) }
+    var stepEmailOrCall by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Multi-Step Voice Workflow") },
+        title = { Text("Define Autonomous Multi-Step Workflow") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -1344,7 +1451,7 @@ private fun CreateMacroDialog(
                 OutlinedTextField(
                     value = triggerPhrase,
                     onValueChange = { triggerPhrase = it },
-                    label = { Text("Spoken Trigger Phrase (e.g. 'night deploy')") },
+                    label = { Text("Voice Trigger Phrase (e.g. 'night deploy')") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("macro_trigger_input")
                 )
@@ -1352,56 +1459,111 @@ private fun CreateMacroDialog(
                     value = description,
                     onValueChange = { description = it },
                     label = { Text("Description") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = targetContact,
-                    onValueChange = { targetContact = it },
-                    label = { Text("Target Phone or Email for Intent") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Text(
+                    text = "Triggering Event:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = ElectricCyan,
+                    fontWeight = FontWeight.Bold
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(WorkflowTriggerEventType.entries) { eventType ->
+                        FilterChip(
+                            selected = selectedEventTrigger == eventType,
+                            onClick = { selectedEventTrigger = eventType },
+                            label = {
+                                Text(eventType.label, style = MaterialTheme.typography.labelSmall)
+                            },
+                            modifier = Modifier.testTag("trigger_event_chip_${eventType.code.lowercase()}")
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Autonomous Multi-Step Actions:",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = EmeraldEnclave,
+                    fontWeight = FontWeight.Bold
+                )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Step: Auto-Resolve Schedule", style = MaterialTheme.typography.bodySmall)
-                    Switch(checked = includeAutoSchedule, onCheckedChange = { includeAutoSchedule = it })
+                    Text(WorkflowActionStepType.SEND_NOTIFICATION.label, style = MaterialTheme.typography.bodySmall)
+                    Switch(checked = stepSendNotification, onCheckedChange = { stepSendNotification = it })
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Step: Synthesize Code Script", style = MaterialTheme.typography.bodySmall)
-                    Switch(checked = includeCodeGen, onCheckedChange = { includeCodeGen = it })
+                    Text(WorkflowActionStepType.UPDATE_TASK_STATUS.label, style = MaterialTheme.typography.bodySmall)
+                    Switch(checked = stepUpdateTaskStatus, onCheckedChange = { stepUpdateTaskStatus = it })
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Step: Trigger Phone/Email Intent", style = MaterialTheme.typography.bodySmall)
-                    Switch(checked = includeEmailOrCall, onCheckedChange = { includeEmailOrCall = it })
+                    Text(WorkflowActionStepType.RESCHEDULE_EVENTS.label, style = MaterialTheme.typography.bodySmall)
+                    Switch(checked = stepRescheduleEvents, onCheckedChange = { stepRescheduleEvents = it })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(WorkflowActionStepType.CREATE_COUNTDOWN_TIMER.label, style = MaterialTheme.typography.bodySmall)
+                    Switch(checked = stepStartCountdownTimer, onCheckedChange = { stepStartCountdownTimer = it })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(WorkflowActionStepType.SPEAK_BRIEFING.label, style = MaterialTheme.typography.bodySmall)
+                    Switch(checked = stepSpeakBriefing, onCheckedChange = { stepSpeakBriefing = it })
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Trigger Email/Call Intent", style = MaterialTheme.typography.bodySmall)
+                    Switch(checked = stepEmailOrCall, onCheckedChange = { stepEmailOrCall = it })
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val steps = mutableListOf("ANALYZE_SENSITIVE_TASKS")
-                    if (includeAutoSchedule) steps.add("AUTO_RESOLVE_CALENDAR")
-                    if (includeCodeGen) steps.add("GENERATE_CODE_SNIPPET")
-                    if (includeEmailOrCall) {
+                    val steps = mutableListOf<String>()
+                    if (stepSendNotification) steps.add("SEND_NOTIFICATION")
+                    if (stepUpdateTaskStatus) steps.add("UPDATE_TASK_STATUS")
+                    if (stepRescheduleEvents) steps.add("RESCHEDULE_EVENTS")
+                    if (stepStartCountdownTimer) steps.add("CREATE_COUNTDOWN_TIMER")
+                    if (stepEmailOrCall) {
                         if (targetContact.contains("@")) {
                             steps.add("SEND_EMAIL:$targetContact")
                         } else {
                             steps.add("DIAL_NUMBER:$targetContact")
                         }
                     }
-                    steps.add("SPEAK_BRIEFING")
-                    onConfirm(title, triggerPhrase, description, steps.joinToString("|"), targetContact)
+                    if (stepSpeakBriefing || steps.isEmpty()) steps.add("SPEAK_BRIEFING")
+                    onConfirm(
+                        title,
+                        triggerPhrase,
+                        description,
+                        steps.joinToString("|"),
+                        targetContact,
+                        selectedEventTrigger.code,
+                        isAutoTriggerEnabled
+                    )
                 },
                 modifier = Modifier.testTag("confirm_create_macro_button")
             ) {
@@ -1413,3 +1575,4 @@ private fun CreateMacroDialog(
         }
     )
 }
+

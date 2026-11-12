@@ -338,8 +338,12 @@ fun ZAIWorkspaceApp(viewModel: OmniWorkspaceViewModel) {
                                 onSubmitVoiceCommandText = { viewModel.processSpokenOrTypedVoiceCommand(it) },
                                 onOpenCodeStudio = { viewModel.selectTab(OmniDestination.CODE_STUDIO) },
                                 onRunMacro = { viewModel.executeWorkflowMacro(it) },
-                                onCreateCustomMacro = { title, trig, desc, steps, contact ->
-                                    viewModel.createCustomMacro(title, trig, desc, steps, contact)
+                                onCreateCustomMacro = { title, trig, desc, steps, contact, eventType, autoEnabled ->
+                                    viewModel.createCustomMacro(title, trig, desc, steps, contact, eventType, autoEnabled)
+                                },
+                                onToggleMacroAutoTrigger = { viewModel.toggleMacroAutoTrigger(it) },
+                                onSimulateWorkflowEvent = { evType, ctxTitle ->
+                                    viewModel.triggerAutonomousWorkflowsForEvent(evType, ctxTitle)
                                 },
                                 onToggleCustomSkill = { viewModel.toggleCustomSkill(it) },
                                 onAddCustomSkill = { name, desc, instr, gated ->
@@ -436,6 +440,11 @@ fun ZAIWorkspaceApp(viewModel: OmniWorkspaceViewModel) {
                                 onDownloadHubResult = { viewModel.downloadSearchResultModel(it) },
                                 onAddCustomHfModel = { repo, name, quant, fmt, size, spec ->
                                     viewModel.addCustomHuggingFaceModel(repo, name, quant, fmt, size, spec)
+                                },
+                                onCancelDownload = { viewModel.cancelModelDownload() },
+                                onDeleteModel = { viewModel.deleteDownloadedModel(it) },
+                                onImportLocalModelUri = { uri, fileName ->
+                                    viewModel.importLocalModelFromUri(uri, fileName)
                                 }
                             )
                         }

@@ -125,303 +125,78 @@ fun WorkspaceHubScreen(
     onDeleteEvent: (Int) -> Unit,
     onSyncSystemCalendar: () -> Unit
 ) {
-    var selectedViewMode by rememberSaveable { mutableStateOf("UNIFIED") }
+    var selectedViewMode by rememberSaveable { mutableStateOf("KANBAN") }
     var selectedKanbanStage by rememberSaveable { mutableStateOf("ALL") }
     var localAiQuestion by rememberSaveable { mutableStateOf("") }
     var showAddTaskDialog by rememberSaveable { mutableStateOf(false) }
     var showAddEventDialog by rememberSaveable { mutableStateOf(false) }
 
     val conflictCount = events.count { it.hasConflict }
-    val sensitiveCount = tasks.count { it.isSensitive }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .testTag("workspace_hub_list"),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 1. Z AI Personal Assistant & Local Gemma 2B Intelligence Card
+        // 1. Clean Action Header Card (No giant hero banner or walls of jargon)
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceVariant
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                )
             ) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Image(
-                        painter = painterResource(id = R.drawable.img_workspace_hero_1794370713403),
-                        contentDescription = "Z AI Assistant Neural Timeline Hero",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(145.dp),
-                        contentScale = ContentScale.Crop
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(145.dp)
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        Color.Black.copy(alpha = 0.25f),
-                                        Color(0xFF090D16).copy(alpha = 0.94f)
-                                    )
-                                )
-                            )
-                    )
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Surface(
-                                color = EmeraldEnclave.copy(alpha = 0.22f),
-                                shape = RoundedCornerShape(50),
-                                modifier = Modifier.border(
-                                    1.dp,
-                                    EmeraldEnclave.copy(alpha = 0.6f),
-                                    RoundedCornerShape(50)
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = "Z AI Privacy Enclave",
-                                        tint = EmeraldEnclave,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = "Z AI Assistant • $sensitiveCount Sensitive Tasks",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                color = NeuralViolet.copy(alpha = 0.32f),
-                                shape = RoundedCornerShape(50)
-                            ) {
-                                Text(
-                                    text = activeModel?.let { "${it.displayName} (${it.quantization})" }
-                                        ?: "Gemma 2 2B Q4_K_M",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(44.dp))
-
-                        Text(
-                            text = "Gemma 2B Schedule & Task Intelligence",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = Color.White
-                        )
-                    }
-                }
-
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Z AI Self-Aware Briefing Box
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .border(
-                                1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                                RoundedCornerShape(12.dp)
-                            )
-                    ) {
-                        Text(
-                            text = aiBriefing,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(12.dp)
-                        )
-                    }
-
-                    // Quick Self-Introspection & Capability Prompts
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val quickPrompts = listOf(
-                            "System capabilities & enclave status",
-                            "Analyze conflicts & optimal meeting slots",
-                            "Prioritize tasks by deadline & importance",
-                            "Can you search the web right now?"
-                        )
-                        items(quickPrompts) { prompt ->
-                            SuggestionChip(
-                                onClick = { onAskLocalAi(prompt) },
-                                label = { Text(prompt, style = MaterialTheme.typography.labelSmall) },
-                                modifier = Modifier.testTag("zai_prompt_chip_${prompt.take(10).replace(" ", "_")}")
-                            )
-                        }
-                    }
-
-                    // Ask Z AI + Permission-Gated Web Search Toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = localAiQuestion,
-                            onValueChange = { localAiQuestion = it },
-                            placeholder = {
-                                Text(
-                                    "Ask Z AI (${activeModel?.displayName ?: "Gemma 2B"}) or search web...",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            },
-                            singleLine = true,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("local_ai_query_input"),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        IconButton(
-                            onClick = {
-                                onAskLocalAi(localAiQuestion)
-                                localAiQuestion = ""
-                            },
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.primary)
-                                .testTag("local_ai_ask_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Send,
-                                contentDescription = "Ask Z AI",
-                                tint = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
-                    }
-
-                    // Web Search Grounding Bar
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Language,
-                                contentDescription = "Web Search Grounding",
-                                tint = if (isWebSearchEnabled) ElectricCyan else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isWebSearchEnabled) {
-                                    "Web Search: ENABLED (Permission-Gated)"
-                                } else {
-                                    "Web Search: OFF (Strict Local Enclave)"
-                                },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = if (isWebSearchEnabled) ElectricCyan else MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "Tasks, Schedule & Timers",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
                             )
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            if (isWebSearchEnabled) {
-                                TextButton(
-                                    onClick = {
-                                        onSearchWebNow(localAiQuestion.ifBlank { "Gemma 2B Android scheduling optimization" })
-                                    },
-                                    modifier = Modifier.testTag("search_web_now_button")
-                                ) {
-                                    Text("Search Web", style = MaterialTheme.typography.labelLarge)
-                                }
-                            }
-                            Switch(
-                                checked = isWebSearchEnabled,
-                                onCheckedChange = onToggleWebSearch,
-                                modifier = Modifier.testTag("web_search_toggle_switch")
-                            )
-                        }
-                    }
-
-                    if (isSearchingWeb) {
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth(),
-                            color = ElectricCyan
-                        )
-                    }
-
-                    // Render Live Web Citations if present
-                    AnimatedVisibility(visible = webCitations.isNotEmpty()) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
-                                text = "Live Web Search Grounding Citations:",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = "${tasks.count { it.status != "DONE" }} active tasks • ${events.size} events • ${countdownReminders.size} timers",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = ElectricCyan
                             )
-                            webCitations.forEach { citation ->
-                                Surface(
-                                    color = MaterialTheme.colorScheme.surface,
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onOpenCitationUrl(citation.url) }
-                                        .border(
-                                            1.dp,
-                                            ElectricCyan.copy(alpha = 0.35f),
-                                            RoundedCornerShape(10.dp)
-                                        )
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(10.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "${citation.title} (${citation.sourceDomain})",
-                                                style = MaterialTheme.typography.labelLarge,
-                                                color = ElectricCyan
-                                            )
-                                            Text(
-                                                text = citation.snippet,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                        Icon(
-                                            imageVector = Icons.Default.OpenInNew,
-                                            contentDescription = "Open Source Link",
-                                            tint = ElectricCyan,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
+                        }
+
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedButton(
+                                onClick = { showAddTaskDialog = true },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("open_add_task_dialog_button")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "New Task", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Task", style = MaterialTheme.typography.labelMedium)
+                            }
+                            OutlinedButton(
+                                onClick = { showAddEventDialog = true },
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.testTag("open_add_event_dialog_button")
+                            ) {
+                                Icon(Icons.Default.CalendarMonth, contentDescription = "New Event", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Event", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
 
-                    // Dual Smart Action Buttons: Auto-Schedule + Deadline Prioritizer
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -429,10 +204,10 @@ fun WorkspaceHubScreen(
                         Button(
                             onClick = onRunAutoScheduler,
                             modifier = Modifier
-                                .weight(1.3f)
-                                .height(48.dp)
+                                .weight(1.2f)
+                                .height(42.dp)
                                 .testTag("auto_schedule_button"),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = if (conflictCount > 0) AmberConflict else ElectricCyan,
                                 contentColor = Color(0xFF04131A)
@@ -441,16 +216,12 @@ fun WorkspaceHubScreen(
                             Icon(
                                 imageVector = Icons.Default.AutoAwesome,
                                 contentDescription = "Smart Auto-Scheduler",
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (conflictCount > 0) {
-                                    "Fix $conflictCount Conflicts & Schedule"
-                                } else {
-                                    "Auto-Schedule All"
-                                },
-                                style = MaterialTheme.typography.labelLarge,
+                                text = if (conflictCount > 0) "Fix $conflictCount Conflict(s)" else "Auto-Schedule",
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -459,19 +230,41 @@ fun WorkspaceHubScreen(
                             onClick = onRunPrioritizeOnly,
                             modifier = Modifier
                                 .weight(1f)
-                                .height(48.dp)
+                                .height(42.dp)
                                 .testTag("prioritize_tasks_button"),
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Sort,
                                 contentDescription = "Prioritize by Deadline & Importance",
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = "Rank Tasks",
-                                style = MaterialTheme.typography.labelLarge
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        }
+                    }
+
+                    // Clean 4-Tab Selector: Tasks | Schedule | Timers | All
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val tabs = listOf(
+                            "KANBAN" to "Tasks (${tasks.size})",
+                            "TIMELINE" to "Schedule (${events.size})",
+                            "REMINDERS" to "Timers (${countdownReminders.size})",
+                            "UNIFIED" to "All & AI Audit"
+                        )
+                        items(tabs) { (mode, label) ->
+                            FilterChip(
+                                selected = selectedViewMode == mode,
+                                onClick = { selectedViewMode = mode },
+                                label = { Text(label) },
+                                modifier = Modifier.testTag("view_mode_$mode"),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
                             )
                         }
                     }
@@ -479,369 +272,26 @@ fun WorkspaceHubScreen(
             }
         }
 
-        // 1B. Gemma 2B Local Sensitive Data Processing & Offline Smart Insights Enclave Card
-        if (sensitiveAuditReport != null) {
+        // Show ringing alarm alert immediately at top if any timer just went off
+        if (activeReminderAlertMessage != null || selectedViewMode == "REMINDERS" || selectedViewMode == "UNIFIED") {
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(
-                            1.5.dp,
-                            EmeraldEnclave.copy(alpha = 0.65f),
-                            RoundedCornerShape(20.dp)
-                        )
-                        .testTag("local_sensitive_insights_card"),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "Gemma 2B Sensitive Enclave",
-                                    tint = EmeraldEnclave,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Text(
-                                        text = "Gemma 2B Sensitive Project Data Enclave",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = sensitiveAuditReport.privacyGuaranteeBadge,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = EmeraldEnclave
-                                    )
-                                }
-                            }
-
-                            Surface(
-                                color = EmeraldEnclave.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(50)
-                            ) {
-                                Text(
-                                    text = "${sensitiveAuditReport.enclaveProtectionScore}% Shield",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = EmeraldEnclave,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-
-                        // Enclave KPIs Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = "${sensitiveAuditReport.sensitiveTaskCount}/${sensitiveAuditReport.totalTasksAudited}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = ElectricCyan,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Sensitive Tasks",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Surface(
-                                color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = "${sensitiveAuditReport.redactedFieldCount}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = AmberConflict,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "PII/Tokens Shielded",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                            Surface(
-                                color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = "0 KB",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = EmeraldEnclave,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "Cloud Egress",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-
-                        // Offline Smart Insights List with One-Tap Actions
-                        sensitiveAuditReport.insights.forEach { insight ->
-                            val sevColor = when (insight.severityBadge) {
-                                "HIGH RISK" -> CrimsonAlert
-                                "OPTIMIZATION" -> ElectricCyan
-                                else -> EmeraldEnclave
-                            }
-                            Surface(
-                                color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .border(1.dp, sevColor.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
-                                    .testTag("sensitive_insight_item_${insight.id}")
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = insight.title,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        Surface(
-                                            color = sevColor.copy(alpha = 0.18f),
-                                            shape = RoundedCornerShape(6.dp)
-                                        ) {
-                                            Text(
-                                                text = insight.severityBadge,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = sevColor,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                    Text(
-                                        text = insight.insightSummary,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.End
-                                    ) {
-                                        OutlinedButton(
-                                            onClick = { onExecuteSensitiveInsightAction(insight.id) },
-                                            shape = RoundedCornerShape(10.dp),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
-                                            modifier = Modifier.testTag("execute_sensitive_insight_${insight.id}")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.AutoAwesome,
-                                                contentDescription = null,
-                                                tint = sevColor,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = insight.recommendedOfflineAction,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = sevColor,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                TaskReminderCountdownCard(
+                    reminders = countdownReminders,
+                    activeFiredAlertMessage = activeReminderAlertMessage,
+                    tasks = tasks,
+                    events = events,
+                    onAddCountdownReminder = onAddCountdownReminder,
+                    onTogglePauseReminder = onTogglePauseReminder,
+                    onTriggerReminderAlertNow = onTriggerReminderAlertNow,
+                    onSnoozeFiredAlertFiveMin = onSnoozeReminderFiveMin,
+                    onDismissFiredAlert = onDismissReminderAlert,
+                    onDeleteReminder = onDeleteReminder
+                )
             }
         }
 
-        // 2. Gemma 2B Suggested Optimal Meeting Times Carousel
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Gemma 2B Suggested Optimal Meeting Slots",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = ElectricCyan
-                    )
-                    Text(
-                        text = "Tap slot to book",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(suggestedSlots, key = { it.id }) { slot ->
-                        Surface(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier
-                                .width(235.dp)
-                                .border(
-                                    1.dp,
-                                    EmeraldEnclave.copy(alpha = 0.55f),
-                                    RoundedCornerShape(14.dp)
-                                )
-                                .clickable { onBookSuggestedSlot(slot) }
-                                .testTag("book_suggested_slot_${slot.id}")
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = slot.formattedWindow,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = EmeraldEnclave,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Surface(
-                                        color = EmeraldEnclave.copy(alpha = 0.2f),
-                                        shape = RoundedCornerShape(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "${slot.confidencePercent}% Match",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = EmeraldEnclave,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = slot.rationale,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2B. Z AI Smart Countdown & Frequent Reminder Center (1m, 5m, 30m, 1h, 1d, 3d, 5d, 1mo)
-        item {
-            TaskReminderCountdownCard(
-                reminders = countdownReminders,
-                activeFiredAlertMessage = activeReminderAlertMessage,
-                tasks = tasks,
-                events = events,
-                onAddCountdownReminder = onAddCountdownReminder,
-                onTogglePauseReminder = onTogglePauseReminder,
-                onTriggerReminderAlertNow = onTriggerReminderAlertNow,
-                onSnoozeFiredAlertFiveMin = onSnoozeReminderFiveMin,
-                onDismissFiredAlert = onDismissReminderAlert,
-                onDeleteReminder = onDeleteReminder
-            )
-        }
-
-        // 3. View Mode Switcher + Quick Add Buttons
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(
-                        "UNIFIED" to "Unified",
-                        "KANBAN" to "Kanban (${tasks.size})",
-                        "TIMELINE" to "Timeline (${events.size})"
-                    ).forEach { (mode, label) ->
-                        FilterChip(
-                            selected = selectedViewMode == mode,
-                            onClick = { selectedViewMode = mode },
-                            label = { Text(label) },
-                            modifier = Modifier.testTag("view_mode_$mode"),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        )
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(
-                        onClick = { showAddTaskDialog = true },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        modifier = Modifier.testTag("open_add_task_dialog_button")
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "New Task", modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Task", style = MaterialTheme.typography.labelLarge)
-                    }
-                    OutlinedButton(
-                        onClick = { showAddEventDialog = true },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        modifier = Modifier.testTag("open_add_event_dialog_button")
-                    ) {
-                        Icon(Icons.Default.CalendarMonth, contentDescription = "New Event", modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Event", style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-            }
-        }
-
-        // 4. KANBAN PROJECT SECTION
-        if (selectedViewMode == "UNIFIED" || selectedViewMode == "KANBAN") {
+        // KANBAN PROJECT TASKS SECTION
+        if (selectedViewMode == "KANBAN" || selectedViewMode == "UNIFIED") {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
@@ -857,12 +307,13 @@ fun WorkspaceHubScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Deadline & Importance Kanban",
-                                style = MaterialTheme.typography.titleLarge
+                                text = "Project Tasks",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                         Text(
-                            text = "${tasks.count { it.status == "DONE" }}/${tasks.size} Done",
+                            text = "${tasks.count { it.status == "DONE" }}/${tasks.size} Completed",
                             style = MaterialTheme.typography.labelMedium,
                             color = EmeraldEnclave
                         )
@@ -906,10 +357,9 @@ fun WorkspaceHubScreen(
             }
         }
 
-        // 5. CALENDAR TIMELINE SECTION
-        if (selectedViewMode == "UNIFIED" || selectedViewMode == "TIMELINE") {
+        // CALENDAR TIMELINE & SUGGESTED SLOTS SECTION
+        if (selectedViewMode == "TIMELINE" || selectedViewMode == "UNIFIED") {
             item {
-                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -923,8 +373,9 @@ fun WorkspaceHubScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Time-Blocked Schedule",
-                            style = MaterialTheme.typography.titleLarge
+                            text = "Schedule & Meetings",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                     TextButton(
@@ -942,11 +393,168 @@ fun WorkspaceHubScreen(
                 }
             }
 
+            if (suggestedSlots.isNotEmpty()) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Suggested Free Slots (Tap to Book):",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = ElectricCyan
+                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(suggestedSlots, key = { it.id }) { slot ->
+                                Surface(
+                                    color = MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier
+                                        .width(210.dp)
+                                        .border(1.dp, EmeraldEnclave.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                        .clickable { onBookSuggestedSlot(slot) }
+                                        .testTag("book_suggested_slot_${slot.id}")
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Text(
+                                            text = slot.formattedWindow,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = EmeraldEnclave,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = slot.rationale,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             items(events, key = { "event_${it.id}" }) { event ->
                 CalendarEventCard(
                     event = event,
                     onDelete = { onDeleteEvent(event.id) }
                 )
+            }
+        }
+
+        // AI AUDIT & BRIEFING SECTION (Shown in UNIFIED tab so it doesn't clutter the primary Tasks view)
+        if (selectedViewMode == "UNIFIED") {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Workspace AI Briefing (${activeModel?.displayName ?: "Gemma 2B"})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = ElectricCyan
+                        )
+                        Text(
+                            text = aiBriefing,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = localAiQuestion,
+                                onValueChange = { localAiQuestion = it },
+                                placeholder = { Text("Ask about tasks or schedule...", style = MaterialTheme.typography.bodySmall) },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("local_ai_query_input"),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            IconButton(
+                                onClick = {
+                                    onAskLocalAi(localAiQuestion)
+                                    localAiQuestion = ""
+                                },
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.primary)
+                                    .testTag("local_ai_ask_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Send,
+                                    contentDescription = "Ask Z AI",
+                                    tint = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (sensitiveAuditReport != null) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, EmeraldEnclave.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                            .testTag("local_sensitive_insights_card"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Privacy Audit (${sensitiveAuditReport.sensitiveTaskCount} Sensitive Tasks)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = EmeraldEnclave
+                            )
+                            sensitiveAuditReport.insights.forEach { insight ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("sensitive_insight_item_${insight.id}"),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = insight.title,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TextButton(
+                                        onClick = { onExecuteSensitiveInsightAction(insight.id) },
+                                        modifier = Modifier.testTag("execute_sensitive_insight_${insight.id}")
+                                    ) {
+                                        Text(insight.recommendedOfflineAction, style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

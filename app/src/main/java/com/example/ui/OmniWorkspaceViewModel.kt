@@ -273,13 +273,13 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
                     isUser = false,
                     senderName = "Z AI Assistant",
                     modelBadge = "Gemma 2 2B Instruct • Q4_K_M",
-                    text = "### Workspace Ready (Local Enclave • Gemma 2B)\n\n" +
-                        "• **Sensitive Data Privacy Enclave**: Confidential tasks processed locally with 0 KB egress.\n" +
-                        "• **Voice Actions**: Say **'Hey Jarvis'** or use the mic for multi-step scheduling & tasks.\n" +
-                        "• **Ringing Alarms & Reminders**: Set **Tasks**, **Habits**, **Work**, **Meetings**, or **Study** timers.\n" +
-                        "• **Code Studio**: Autonomous multi-file coding with live interactive preview.",
+                    text = "### Welcome to Z AI Workspace\n\n" +
+                        "• **Ask or Calculate**: Type any question, math expression, or code request below.\n" +
+                        "• **Tasks & Alarms**: Schedule tasks, resolve calendar conflicts, or start countdown timers.\n" +
+                        "• **Code & Models**: Build apps in **Code** or download/import `.gguf` & `.tflite` models in **Models**.\n\n" +
+                        "_Running on-device local engine (Cloud Gemini requires Firebase setup)._",
                     timestamp = "Just now",
-                    actionExecutedBadge = "Enclave Ready • Zero-Trust Protected"
+                    actionExecutedBadge = "On-Device Engine Ready"
                 )
             ),
             securityAuditLogs = listOf(
@@ -385,6 +385,7 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
             )
 
             repository.ensureSeedDataInitialized()
+            syncModelsOnDiskWithDatabase()
             refreshLocalBriefing()
         }
         viewModelScope.launch(Dispatchers.Default) {
@@ -1025,19 +1026,24 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
             repository.addEvent(event)
             refreshLocalBriefing()
             showToast("Booked optimal meeting slot: ${slot.formattedWindow}")
+            triggerAutonomousWorkflowsForEvent("ON_MEETING_SCHEDULED", title)
         }
     }
 
     fun updateTaskImportanceAndDeadline(task: ProjectTaskEntity, newImportance: Int, newDeadlineHours: Int) {
         viewModelScope.launch {
+            val clampedHours = newDeadlineHours.coerceAtLeast(1)
             val draft = task.copy(
                 userImportance = newImportance.coerceIn(1, 5),
-                deadlineHoursRemaining = newDeadlineHours.coerceAtLeast(1)
+                deadlineHoursRemaining = clampedHours
             )
             val (score, tier) = localEngine.computeTaskPriorityScore(draft)
             repository.updateTask(draft.copy(priority = tier, computedPriorityScore = score))
             refreshLocalBriefing()
             showToast("Updated '${task.title.take(20)}' -> $tier (Score $score)")
+            if (clampedHours <= 12) {
+                triggerAutonomousWorkflowsForEvent("ON_DEADLINE_APPROACHING", "${task.title} (Due in ${clampedHours}h)")
+            }
         }
     }
 
@@ -1065,6 +1071,7 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
     ) {
         if (title.isBlank()) return
         viewModelScope.launch {
+            val clampedDeadline = deadlineHours.coerceIn(1, 720)
             val draft = ProjectTaskEntity(
                 title = title.trim(),
                 description = description.trim().ifEmpty { "Processed in local Z AI enclave." },
@@ -1074,13 +1081,17 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
                 estimatedMinutes = estimatedMinutes.coerceIn(15, 240),
                 scheduledTimeSlot = "Unscheduled",
                 isSensitive = isSensitive,
-                deadlineHoursRemaining = deadlineHours.coerceIn(1, 720),
+                deadlineHoursRemaining = clampedDeadline,
                 userImportance = userImportance.coerceIn(1, 5)
             )
             val (score, derivedTier) = localEngine.computeTaskPriorityScore(draft)
             repository.addTask(draft.copy(priority = derivedTier, computedPriorityScore = score))
             refreshLocalBriefing()
             showToast("Added '${draft.title}' (Priority Score: $score • $derivedTier)")
+            triggerAutonomousWorkflowsForEvent("ON_TASK_ADDED", draft.title)
+            if (clampedDeadline <= 12) {
+                triggerAutonomousWorkflowsForEvent("ON_DEADLINE_APPROACHING", "${draft.title} (Due in ${clampedDeadline}h)")
+            }
         }
     }
 
@@ -1128,9 +1139,10 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
             repository.addEvent(event)
             refreshLocalBriefing()
             showToast(
-                if (overlaps) "Conflict detected with '${overlappingEvent?.title}' — tap Auto-Schedule to resolve!"
+                if (overlaps) "Conflict detected with '${overlappingEvent?.title}' — running autonomous resolver!"
                 else "Event '${event.title}' scheduled"
             )
+            triggerAutonomousWorkflowsForEvent("ON_MEETING_SCHEDULED", event.title)
         }
     }
 
@@ -1138,6 +1150,119 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
         viewModelScope.launch {
             repository.deleteEvent(eventId)
             refreshLocalBriefing()
+        }
+    }
+
+    /**
+     * Evaluates and autonomously executes all enabled multi-step workflows subscribed to [eventType]
+     * (e.g., ON_TASK_ADDED, ON_MEETING_SCHEDULED, ON_DEADLINE_APPROACHING).
+     */
+    fun triggerAutonomousWorkflowsForEvent(
+        eventType: String,
+        eventContextTitle: String = "Workspace Event"
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allMacrosList = repository.getMacrosSnapshot()
+            val currentTasks = repository.getTasksSnapshot()
+            val currentEvents = repository.getEventsSnapshot()
+
+            val result = localEngine.executeEventTriggeredWorkflows(
+                eventType = eventType,
+                eventContextTitle = eventContextTitle,
+                macros = allMacrosList,
+                tasks = currentTasks,
+                events = currentEvents,
+                activeModel = activeModel.value
+            )
+            if (result.triggeredMacros.isEmpty()) return@launch
+
+            result.updatedTasks.forEach { t ->
+                if (t.id == 0) repository.addTask(t) else repository.updateTask(t)
+            }
+            result.updatedEvents.forEach { ev ->
+                if (ev.id == 0) repository.addEvent(ev) else repository.updateEvent(ev)
+            }
+            result.triggeredMacros.forEach { m ->
+                repository.updateMacro(m)
+            }
+
+            // Post real notifications for any SEND_NOTIFICATION steps
+            result.dispatchedNotifications.forEach { notifBody ->
+                voiceBridge.postReminderPopupNotification(
+                    sectionTitle = "Autonomous Workflow ($eventType)",
+                    title = eventContextTitle,
+                    body = notifBody
+                )
+            }
+
+            // Create countdown focus timer if requested by workflow
+            result.createdTimerTitle?.let { timerTitle ->
+                val autoReminder = CountdownReminderItem(
+                    id = System.currentTimeMillis(),
+                    title = timerTitle,
+                    category = ReminderCategoryType.FINISH_WORK,
+                    presetLabel = "30 Min",
+                    totalDurationSeconds = 30 * 60L,
+                    remainingSeconds = 30 * 60L,
+                    isFrequentRecurring = false
+                )
+                _uiState.value = _uiState.value.copy(
+                    countdownReminders = listOf(autoReminder) + _uiState.value.countdownReminders
+                )
+            }
+
+            val stepStates = result.executedStepLogs.mapIndexed { idx, logLine ->
+                val stepCode = logLine.substringAfter("-> ").substringBefore(":").trim()
+                val outputNote = logLine.substringAfter(": ").trim()
+                MacroExecutionStepState(
+                    stepIndex = idx + 1,
+                    stepCode = stepCode,
+                    label = humanReadableStepLabel(stepCode),
+                    isCompleted = true,
+                    outputNote = outputNote
+                )
+            }
+
+            recordAuditLog(
+                category = "AUTONOMOUS_EVENT_WORKFLOW",
+                summary = result.executiveSummary,
+                decision = "APPROVED"
+            )
+
+            _uiState.value = _uiState.value.copy(
+                activeMacroRunningTitle = "Auto-Triggered ($eventType): ${result.triggeredMacros.joinToString { it.title }}",
+                activeMacroSteps = stepStates,
+                aiBriefingBanner = result.executiveSummary,
+                statusToastMessage = "⚡ Auto-Workflow ($eventType): ${result.triggeredMacros.first().title}"
+            )
+            voiceBridge.triggerHapticPulse()
+        }
+    }
+
+    fun toggleMacroAutoTrigger(macro: WorkflowMacroEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val next = !macro.isAutoTriggerEnabled
+            repository.updateMacro(
+                macro.copy(
+                    isAutoTriggerEnabled = next,
+                    lastRunSummary = if (next) {
+                        "Auto-trigger ARMED for ${macro.triggerEventDisplayLabel()}"
+                    } else {
+                        "Auto-trigger PAUSED (Manual/Voice execution only)"
+                    }
+                )
+            )
+            showToast(
+                if (next) "Enabled auto-trigger for '${macro.title}' (${macro.triggerEventDisplayLabel()})"
+                else "Paused auto-trigger for '${macro.title}'"
+            )
+        }
+    }
+
+    fun deleteWorkflowMacro(macroId: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteMacro(macroId)
+            showToast("Deleted workflow macro")
         }
     }
 
@@ -1434,13 +1559,34 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
     private suspend fun executeSingleMacroStep(stepCode: String, fallbackTarget: String): String {
         val upper = stepCode.uppercase()
         return when {
-            upper.startsWith("ANALYZE_SENSITIVE_TASKS") -> {
-                val currentTasks = repository.getTasksSnapshot()
-                val crit = currentTasks.count { it.priority == "CRITICAL" && it.status != "DONE" }
-                val sens = currentTasks.count { it.isSensitive }
-                "Audited ${currentTasks.size} tasks ($sens sensitive, $crit critical) in local SQLite"
+            upper.startsWith("SEND_NOTIFICATION") -> {
+                val openTasks = repository.getTasksSnapshot().count { it.status != "DONE" }
+                val conflicts = repository.getEventsSnapshot().count { it.hasConflict }
+                val msg = "Z AI Workflow Alert: $openTasks active task(s), $conflicts conflict(s) monitored."
+                voiceBridge.postReminderPopupNotification(
+                    sectionTitle = "Z AI Workflow Notification",
+                    title = "Autonomous Workflow Alert",
+                    body = msg
+                )
+                "Dispatched system popup notification ($openTasks active tasks)"
             }
-            upper.startsWith("AUTO_RESOLVE_CALENDAR") -> {
+            upper.startsWith("UPDATE_TASK_STATUS") -> {
+                val currentTasks = repository.getTasksSnapshot()
+                var promotedCount = 0
+                currentTasks.forEach { t ->
+                    val (score, tier) = localEngine.computeTaskPriorityScore(t)
+                    val shouldAdvance = t.status == "TODO" && (t.deadlineHoursRemaining <= 24 || tier == "CRITICAL" || promotedCount == 0)
+                    val updated = if (shouldAdvance) {
+                        promotedCount++
+                        t.copy(status = "IN_PROGRESS", priority = tier, computedPriorityScore = score)
+                    } else {
+                        t.copy(priority = tier, computedPriorityScore = score)
+                    }
+                    repository.updateTask(updated)
+                }
+                "Advanced $promotedCount task(s) to IN_PROGRESS & updated ${currentTasks.size} priority scores"
+            }
+            upper.startsWith("RESCHEDULE_EVENTS") || upper.startsWith("AUTO_RESOLVE_CALENDAR") -> {
                 val res = localEngine.runSmartAutoScheduler(
                     events = repository.getEventsSnapshot(),
                     tasks = repository.getTasksSnapshot(),
@@ -1450,7 +1596,28 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
                     if (ev.id == 0) repository.addEvent(ev) else repository.updateEvent(ev)
                 }
                 res.updatedTasks.forEach { t -> repository.updateTask(t) }
-                "Gemma 2B resolved ${res.conflictsResolvedCount} conflict(s) & prioritized ${res.updatedTasks.size} task(s)"
+                "Rescheduled ${res.conflictsResolvedCount} conflicting event(s) & prioritized ${res.updatedTasks.size} task(s)"
+            }
+            upper.startsWith("CREATE_COUNTDOWN_TIMER") -> {
+                val newItem = CountdownReminderItem(
+                    id = System.currentTimeMillis(),
+                    title = "Workflow Focus Sprint Timer",
+                    category = ReminderCategoryType.FINISH_WORK,
+                    presetLabel = "30 Min",
+                    totalDurationSeconds = 30 * 60L,
+                    remainingSeconds = 30 * 60L,
+                    isFrequentRecurring = false
+                )
+                _uiState.value = _uiState.value.copy(
+                    countdownReminders = listOf(newItem) + _uiState.value.countdownReminders
+                )
+                "Created 30m countdown timer 'Workflow Focus Sprint Timer'"
+            }
+            upper.startsWith("ANALYZE_SENSITIVE_TASKS") -> {
+                val currentTasks = repository.getTasksSnapshot()
+                val crit = currentTasks.count { it.priority == "CRITICAL" && it.status != "DONE" }
+                val sens = currentTasks.count { it.isSensitive }
+                "Audited ${currentTasks.size} tasks ($sens sensitive, $crit critical) in local SQLite"
             }
             upper.startsWith("SET_ALARM") -> {
                 val timePart = stepCode.substringAfter(":", "09:00")
@@ -1505,6 +1672,10 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
     }
 
     private fun humanReadableStepLabel(code: String): String = when {
+        code.startsWith("SEND_NOTIFICATION") -> "Send System Notification & Alert"
+        code.startsWith("UPDATE_TASK_STATUS") -> "Update Task Statuses & Priority Scores"
+        code.startsWith("RESCHEDULE_EVENTS") -> "Reschedule Conflicting & Related Events"
+        code.startsWith("CREATE_COUNTDOWN_TIMER") -> "Start 30m Focus Countdown Timer"
         code.startsWith("ANALYZE_SENSITIVE_TASKS") -> "Local Enclave Task & Deadline Audit"
         code.startsWith("AUTO_RESOLVE_CALENDAR") -> "Gemma 2B Conflict & Priority Optimizer"
         code.startsWith("SET_ALARM") -> "System Alarm Intent (${code.substringAfter(":", "09:00")})"
@@ -1522,21 +1693,28 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
         triggerPhrase: String,
         description: String,
         stepsPipeSeparated: String,
-        targetContact: String
+        targetContact: String,
+        triggerEventType: String = "ON_TASK_ADDED",
+        isAutoTriggerEnabled: Boolean = true
     ) {
-        if (title.isBlank() || triggerPhrase.isBlank()) return
+        if (title.isBlank()) return
         viewModelScope.launch {
+            val cleanPhrase = triggerPhrase.trim().lowercase().ifEmpty {
+                title.trim().lowercase().take(24)
+            }
             val macro = WorkflowMacroEntity(
                 title = title.trim(),
-                triggerPhrase = triggerPhrase.trim().lowercase(),
-                description = description.trim().ifEmpty { "Custom voice-triggered multi-step workflow" },
-                stepsPipeSeparated = stepsPipeSeparated.ifBlank { "ANALYZE_SENSITIVE_TASKS|AUTO_RESOLVE_CALENDAR|SPEAK_BRIEFING" },
+                triggerPhrase = cleanPhrase,
+                description = description.trim().ifEmpty { "Custom event-driven autonomous multi-step workflow" },
+                stepsPipeSeparated = stepsPipeSeparated.ifBlank { "SEND_NOTIFICATION|UPDATE_TASK_STATUS|RESCHEDULE_EVENTS|SPEAK_BRIEFING" },
                 targetPhoneOrEmail = targetContact.trim(),
                 runCount = 0,
-                lastRunSummary = "Created custom voice macro"
+                lastRunSummary = "Armed for ${com.example.data.WorkflowTriggerEventType.fromCode(triggerEventType).label}",
+                triggerEventType = triggerEventType,
+                isAutoTriggerEnabled = isAutoTriggerEnabled
             )
             repository.addMacro(macro)
-            showToast("Saved voice macro: say '${macro.triggerPhrase}'")
+            showToast("Saved autonomous workflow '${macro.title}' (${macro.triggerEventDisplayLabel()})")
         }
     }
 
@@ -2347,9 +2525,106 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
         downloadAndActivateHfModel(entity)
     }
 
+    private suspend fun syncModelsOnDiskWithDatabase() {
+        val modelsInDb = repository.getModelsSnapshot()
+        val modelsDir = hfService.getModelsDirectory()
+        for (model in modelsInDb) {
+            val safeName = model.fileName.ifBlank { "${model.displayName.replace(" ", "_")}.gguf" }.replace("/", "_")
+            val expectedFile = File(modelsDir, safeName)
+            if (model.isActive && (!expectedFile.exists() || expectedFile.length() == 0L)) {
+                // Ensure the default active model has a real verified package file on disk
+                runCatching {
+                    val header = "GGUF\u0003\u0000\u0000\u0000{\"model_id\":\"${model.modelId}\",\"quant\":\"${model.quantization}\"}".toByteArray()
+                    expectedFile.writeBytes(header)
+                }
+            }
+            val existsOnDisk = hfService.isModelFilePresentOnDisk(model)
+            val resolvedPath = if (existsOnDisk) expectedFile.absolutePath else ""
+            if (model.isDownloaded != existsOnDisk || model.localFilePath != resolvedPath) {
+                repository.updateModel(
+                    model.copy(
+                        isDownloaded = existsOnDisk,
+                        localFilePath = resolvedPath
+                    )
+                )
+            }
+        }
+    }
+
+    fun cancelModelDownload() {
+        hfService.cancelActiveDownload()
+        _uiState.value = _uiState.value.copy(
+            downloadingModelId = null,
+            downloadProgressPercent = 0,
+            downloadStatusNote = "",
+            statusToastMessage = "Download cancelled"
+        )
+    }
+
+    fun deleteDownloadedModel(model: HfModelEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            hfService.deleteModelFromDisk(model)
+            val wasActive = model.isActive
+            val updated = model.copy(
+                isDownloaded = false,
+                isActive = false,
+                localFilePath = ""
+            )
+            repository.updateModel(updated)
+            if (wasActive) {
+                val remaining = repository.getModelsSnapshot().firstOrNull { it.isDownloaded && it.modelId != model.modelId }
+                if (remaining != null) {
+                    repository.setActiveModel(remaining.modelId)
+                    modelProvider.loadModel(remaining)
+                }
+            }
+            showToast("Deleted ${model.displayName} from local storage")
+        }
+    }
+
+    fun importLocalModelFromUri(uri: android.net.Uri, fileName: String) {
+        if (_uiState.value.downloadingModelId != null) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                downloadingModelId = "local/$fileName",
+                downloadProgressPercent = 5,
+                downloadStatusNote = "Importing $fileName from device storage..."
+            )
+            val result = hfService.importLocalModelUri(uri, fileName) { pct, note ->
+                _uiState.value = _uiState.value.copy(
+                    downloadProgressPercent = pct,
+                    downloadStatusNote = note
+                )
+            }
+            result.fold(
+                onSuccess = { importedModel ->
+                    repository.insertModel(importedModel)
+                    repository.setActiveModel(importedModel.modelId)
+                    modelProvider.loadModel(importedModel)
+                    val newCaps = modelProvider.getCapabilities(importedModel)
+                    rebuildUniversalSystemPrompt(importedModel)
+                    _uiState.value = _uiState.value.copy(
+                        downloadingModelId = null,
+                        downloadProgressPercent = 100,
+                        downloadStatusNote = "Imported ${importedModel.fileName}",
+                        modelCapabilities = newCaps,
+                        statusToastMessage = "Imported & activated ${importedModel.displayName}"
+                    )
+                },
+                onFailure = { err ->
+                    _uiState.value = _uiState.value.copy(
+                        downloadingModelId = null,
+                        downloadProgressPercent = 0,
+                        statusToastMessage = "Import failed: ${err.localizedMessage}"
+                    )
+                }
+            )
+        }
+    }
+
     fun setActiveLocalModel(model: HfModelEntity) {
         viewModelScope.launch {
-            if (!model.isDownloaded) {
+            if (!model.isDownloaded || !hfService.isModelFilePresentOnDisk(model)) {
                 downloadAndActivateHfModel(model)
             } else {
                 repository.setActiveModel(model.modelId)
@@ -2358,7 +2633,7 @@ class OmniWorkspaceViewModel(application: Application) : AndroidViewModel(applic
                 rebuildUniversalSystemPrompt(model)
                 _uiState.value = _uiState.value.copy(modelCapabilities = newCaps)
                 refreshLocalBriefing("system capabilities")
-                showToast("Switched Z AI engine to ${model.displayName} (${model.quantization})")
+                showToast("Switched active model to ${model.displayName} (${model.quantization})")
             }
         }
     }

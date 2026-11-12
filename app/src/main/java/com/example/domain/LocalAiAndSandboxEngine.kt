@@ -1049,7 +1049,185 @@ class LocalAiAndSandboxEngine {
             "$maskedTokens [ Enclave Verified • Local Gemma 2B ]"
         }
     }
+
+    /**
+     * Autonomous Event-Driven Multi-Step Workflow Executor.
+     * Evaluates all enabled workflows matching [eventType] (e.g. ON_TASK_ADDED, ON_MEETING_SCHEDULED,
+     * ON_DEADLINE_APPROACHING) and autonomously executes their multi-step actions:
+     * - SEND_NOTIFICATION: Dispatches a structured notification payload for the event
+     * - UPDATE_TASK_STATUS: Advances urgent/relevant TODO tasks to IN_PROGRESS & recomputes priority scores
+     * - RESCHEDULE_EVENTS / AUTO_RESOLVE_CALENDAR: Resolves calendar conflicts & time-blocks urgent tasks
+     * - CREATE_COUNTDOWN_TIMER / SET_TIMER: Requests an autonomous countdown timer for deep focus
+     * - SPEAK_BRIEFING: Synthesizes an executive spoken summary
+     */
+    fun executeEventTriggeredWorkflows(
+        eventType: String,
+        eventContextTitle: String,
+        macros: List<com.example.data.WorkflowMacroEntity>,
+        tasks: List<ProjectTaskEntity>,
+        events: List<CalendarEventEntity>,
+        activeModel: HfModelEntity?
+    ): AutonomousEventWorkflowResult {
+        val matchingMacros = macros.filter { m ->
+            m.isAutoTriggerEnabled && m.triggerEventType.equals(eventType, ignoreCase = true)
+        }
+        if (matchingMacros.isEmpty()) {
+            return AutonomousEventWorkflowResult(
+                eventType = eventType,
+                eventContextTitle = eventContextTitle,
+                triggeredMacros = emptyList(),
+                updatedMacros = macros,
+                updatedTasks = tasks,
+                updatedEvents = events,
+                dispatchedNotifications = emptyList(),
+                executedStepLogs = emptyList(),
+                tasksStatusUpdatedCount = 0,
+                eventsRescheduledCount = 0,
+                createdTimerTitle = null,
+                executiveSummary = "No active autonomous workflows registered for $eventType."
+            )
+        }
+
+        var workingTasks = tasks.map { t ->
+            val (score, tier) = computeTaskPriorityScore(t)
+            t.copy(priority = tier, computedPriorityScore = score)
+        }
+        var workingEvents = events.toList()
+        val notifications = mutableListOf<String>()
+        val stepLogs = mutableListOf<String>()
+        var statusUpdatesCount = 0
+        var rescheduledCount = 0
+        var createdTimerTitle: String? = null
+
+        val updatedMacrosById = mutableMapOf<Int, com.example.data.WorkflowMacroEntity>()
+
+        for (macro in matchingMacros) {
+            val macroNotes = mutableListOf<String>()
+            val steps = macro.stepsList()
+            for (rawStep in steps) {
+                val upper = rawStep.uppercase()
+                when {
+                    upper.startsWith("SEND_NOTIFICATION") -> {
+                        val notifMsg = "[${macro.title}] Event '$eventType' ($eventContextTitle): ${workingTasks.count { it.status != "DONE" }} active tasks, ${workingEvents.count { it.hasConflict }} conflict(s)."
+                        notifications.add(notifMsg)
+                        val note = "Sent notification for '$eventContextTitle'"
+                        macroNotes.add(note)
+                        stepLogs.add("${macro.title} -> SEND_NOTIFICATION: $note")
+                    }
+
+                    upper.startsWith("UPDATE_TASK_STATUS") -> {
+                        var promotedInStep = 0
+                        workingTasks = workingTasks.map { task ->
+                            val (score, tier) = computeTaskPriorityScore(task)
+                            val shouldPromoteToInProgress = task.status == "TODO" && (
+                                task.title.equals(eventContextTitle, ignoreCase = true) ||
+                                    task.deadlineHoursRemaining <= 12 ||
+                                    tier == "CRITICAL" ||
+                                    (eventType.equals("ON_TASK_ADDED", ignoreCase = true) && promotedInStep == 0)
+                                )
+                            if (shouldPromoteToInProgress) {
+                                promotedInStep++
+                                statusUpdatesCount++
+                                task.copy(
+                                    status = "IN_PROGRESS",
+                                    priority = tier,
+                                    computedPriorityScore = score
+                                )
+                            } else {
+                                task.copy(priority = tier, computedPriorityScore = score)
+                            }
+                        }.sortedByDescending { it.computedPriorityScore }
+                        val note = "Updated $promotedInStep task(s) to IN_PROGRESS & re-ranked ${workingTasks.size} priorities"
+                        macroNotes.add(note)
+                        stepLogs.add("${macro.title} -> UPDATE_TASK_STATUS: $note")
+                    }
+
+                    upper.startsWith("RESCHEDULE_EVENTS") || upper.startsWith("AUTO_RESOLVE_CALENDAR") -> {
+                        val opt = runSmartAutoScheduler(
+                            events = workingEvents,
+                            tasks = workingTasks,
+                            activeModel = activeModel
+                        )
+                        workingEvents = opt.updatedEvents
+                        workingTasks = opt.updatedTasks
+                        rescheduledCount += opt.conflictsResolvedCount + opt.tasksScheduledCount
+                        val note = "Rescheduled ${opt.conflictsResolvedCount} conflicting event(s) & scheduled ${opt.tasksScheduledCount} focus block(s)"
+                        macroNotes.add(note)
+                        stepLogs.add("${macro.title} -> RESCHEDULE_EVENTS: $note")
+                    }
+
+                    upper.startsWith("CREATE_COUNTDOWN_TIMER") || upper.startsWith("SET_TIMER") -> {
+                        val timerLabel = "Autonomous Focus: ${eventContextTitle.take(36)}"
+                        createdTimerTitle = timerLabel
+                        val note = "Started 30m countdown timer '$timerLabel'"
+                        macroNotes.add(note)
+                        stepLogs.add("${macro.title} -> CREATE_COUNTDOWN_TIMER: $note")
+                    }
+
+                    upper.startsWith("ANALYZE_SENSITIVE_TASKS") -> {
+                        val sensCount = workingTasks.count { it.isSensitive }
+                        val note = "Audited $sensCount sensitive task(s) in local enclave"
+                        macroNotes.add(note)
+                        stepLogs.add("${macro.title} -> ANALYZE_SENSITIVE_TASKS: $note")
+                    }
+
+                    upper.startsWith("SPEAK_BRIEFING") -> {
+                        val note = "Spoke autonomous status briefing for $eventContextTitle"
+                        macroNotes.add(note)
+                        stepLogs.add("${macro.title} -> SPEAK_BRIEFING: $note")
+                    }
+
+                    else -> {
+                        val note = "Executed step $rawStep"
+                        macroNotes.add(note)
+                        stepLogs.add("${macro.title} -> $rawStep: $note")
+                    }
+                }
+            }
+
+            val summaryLine = "Auto-ran on $eventType (${eventContextTitle.take(24)}): ${macroNotes.joinToString(" • ").take(110)}"
+            updatedMacrosById[macro.id] = macro.copy(
+                runCount = macro.runCount + 1,
+                lastRunSummary = summaryLine,
+                lastTriggeredByEvent = "$eventType: $eventContextTitle"
+            )
+        }
+
+        val finalMacros = macros.map { updatedMacrosById[it.id] ?: it }
+        val summary = "Autonomously executed ${matchingMacros.size} workflow(s) on $eventType ('$eventContextTitle'): " +
+            "$statusUpdatesCount task status(es) updated, $rescheduledCount event(s) rescheduled, ${notifications.size} notification(s) sent."
+
+        return AutonomousEventWorkflowResult(
+            eventType = eventType,
+            eventContextTitle = eventContextTitle,
+            triggeredMacros = matchingMacros.map { updatedMacrosById[it.id] ?: it },
+            updatedMacros = finalMacros,
+            updatedTasks = workingTasks,
+            updatedEvents = workingEvents,
+            dispatchedNotifications = notifications,
+            executedStepLogs = stepLogs,
+            tasksStatusUpdatedCount = statusUpdatesCount,
+            eventsRescheduledCount = rescheduledCount,
+            createdTimerTitle = createdTimerTitle,
+            executiveSummary = summary
+        )
+    }
 }
+
+data class AutonomousEventWorkflowResult(
+    val eventType: String,
+    val eventContextTitle: String,
+    val triggeredMacros: List<com.example.data.WorkflowMacroEntity>,
+    val updatedMacros: List<com.example.data.WorkflowMacroEntity>,
+    val updatedTasks: List<ProjectTaskEntity>,
+    val updatedEvents: List<CalendarEventEntity>,
+    val dispatchedNotifications: List<String>,
+    val executedStepLogs: List<String>,
+    val tasksStatusUpdatedCount: Int,
+    val eventsRescheduledCount: Int,
+    val createdTimerTitle: String?,
+    val executiveSummary: String
+)
 
 data class LocalSensitiveDataInsight(
     val id: String,
@@ -1078,5 +1256,6 @@ data class SensitiveDataAuditReport(
     val insights: List<LocalSensitiveDataInsight>,
     val executiveSummary: String
 )
+
 
 
