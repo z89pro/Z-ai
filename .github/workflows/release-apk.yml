@@ -1,0 +1,70 @@
+name: Build and Release Signed APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Generate Upload Keystore if Not Provided
+        run: |
+          if [ ! -f "$RUNNER_TEMP/upload-keystore.jks" ]; then
+            keytool -genkeypair -v \
+              -keystore "$RUNNER_TEMP/upload-keystore.jks" \
+              -alias upload \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Z AI Assistant, OU=Mobile, O=Z AI, L=Mountain View, S=CA, C=US"
+          fi
+
+      - name: Build Signed Release APK
+        env:
+          KEYSTORE_PATH: ${{ runner.temp }}/upload-keystore.jks
+          STORE_PASSWORD: android
+          KEY_PASSWORD: android
+        run: |
+          gradle assembleRelease --no-daemon
+          mkdir -p releases
+          cp app/build/outputs/apk/release/app-release.apk releases/Z-AI-Assistant-v1.0-release.apk
+
+      - name: Upload Signed APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Z-AI-Assistant-v1.0-release-apk
+          path: releases/Z-AI-Assistant-v1.0-release.apk
+
+      - name: Publish GitHub Release with Signed APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: "Z AI v1.0.0 — Signed Release APK"
+          body: |
+            ### Z AI Android Release (v1.0.0)
+            - **Signed APK**: `Z-AI-Assistant-v1.0-release.apk`
+            - **Package ID**: `com.aistudio.omniworkspace.qrvxnz`
+            - **Features**:
+              - Multi-turn AI Chat with KV-Cache Prompt Reuse
+              - Code Studio with Live Preview, Recent Files (`X/5`), and ZIP/HTML Export
+              - Real AI Document & File Analyzer with Markdown Report Export
+              - Task Manager & Voice Workspace
+          files: |
+            releases/Z-AI-Assistant-v1.0-release.apk

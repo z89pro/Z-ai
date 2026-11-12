@@ -1,0 +1,6 @@
+{
+  "name": "Z AI Assistant",
+  "description": "Personal AI workspace powered by local Gemma 2B and Hugging Face models for smart meeting scheduling, deadline-based task prioritization, voice automation, web search, and code execution.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

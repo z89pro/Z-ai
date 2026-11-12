@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">Z AI Assistant</string>
+    <string name="nav_zai_chat">Z AI Chat</string>
+    <string name="nav_workspace">Workspace</string>
+    <string name="nav_voice_macros">Skills &amp; Ops</string>
+    <string name="nav_code_studio">Code Studio</string>
+    <string name="nav_hf_models">HF Models</string>
+    <string name="enclave_active">Offline Enclave Active</string>
+    <string name="enclave_online_sync">Web &amp; HF Sync Enabled</string>
+    <string name="auto_schedule_btn">Auto-Prioritize &amp; Resolve Conflicts</string>
+    <string name="hands_free_listening">Hands-Free Active</string>
+    <string name="tap_to_speak">Voice Command</string>
+    <string name="run_snippet">Run Snippet</string>
+    <string name="ai_generate_code">Z AI Generate</string>
+    <string name="search_hf_hub">Search Hugging Face GGUF / TFLite Models</string>
+</resources>
